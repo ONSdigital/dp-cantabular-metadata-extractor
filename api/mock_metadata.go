@@ -11,13 +11,18 @@ import (
 	"net/http"
 
 	"github.com/ONSdigital/log.go/v2/log"
+	"github.com/gorilla/mux"
 	"strings"
-	// "github.com/gorilla/mux"
 )
 
 type graphQLRequest struct {
-	Query     string `json:"query"`
-	Variables string `json:"vars"`
+	Query     string    `json:"query"`
+	Variables variables `json:"variables"`
+}
+
+type variables struct {
+	Dataset   string   `json:"dataset"`
+	Variables []string `json:"variables"`
 }
 
 func GetMockMetadata(ctx context.Context) http.HandlerFunc {
@@ -48,7 +53,6 @@ func GetMockMetadata(ctx context.Context) http.HandlerFunc {
 		}
 	}
 }
-
 func GetCantabularMetadata(ctx context.Context) http.HandlerFunc {
 	return func(w http.ResponseWriter, req *http.Request) {
 		w.Header().Set("Content-Type", "application/json; charset=utf-8")
@@ -79,14 +83,12 @@ func GetCantabularMetadata(ctx context.Context) http.HandlerFunc {
 			log.Error(ctx, "get request failed", err)
 			http.Error(w, "Failed to get cantabular metadata", http.StatusInternalServerError)
 		}
-
 		client := &http.Client{}
 		response, err := client.Do(request)
 		if err != nil {
 			log.Error(ctx, "request failed", err)
 			http.Error(w, "an error occured, failed to return a response", http.StatusInternalServerError)
 		}
-
 		defer response.Body.Close()
 
 		bytesRespBody, errRead := ioutil.ReadAll(response.Body)
@@ -109,26 +111,54 @@ func GetCantabularMetadataWithVars(ctx context.Context) http.HandlerFunc {
 		w.Header().Set("Content-Type", "application/json; charset=utf-8")
 		w.Header().Set("Access-Control-Allow-Origin", "*")
 		ctx := req.Context()
-		query := `query($dataset:String!) {
-					dataset(name: $dataset) {
-						variables(names: ["Age"]) {
-							edges {
-								node {
-									name
-									label
-									categories {
-										totalCount
-									}
-								}
-							}
+
+		query := `query($dataset: String!, $variables: [String!]!){
+			dataset(name: $dataset) {
+			  name
+			  description
+			  meta{
+				Source{
+				  Contact{
+					Contact_Name
+					Contact_Email
+					Contact_Phone
+				  }
+				  Licence
+				  Nationals_Statistic_Certified
+				}
+				
+			  }
+			  variables(names: $variables){
+				edges{
+				  node{
+					name
+					description
+					meta{
+					  ONS_Variable{
+						Keywords
+						Statistical_Unit{
+						  Statistical_Unit
+						  Statistical_Unit_Description
+						}
+						Variable_Title
+						Variable_Description
+						Topic{
+						  Topic_Title
 						}
 					  }
-					}`
+					}
+				  }
+				}
+			   
+			  }
+			}
+		  }
+		  `
+		params := mux.Vars(req)
+		vars := variables{Dataset: params["id"], Variables: []string{"Age", "Country"}}
+		gqlReq := graphQLRequest{Query: query, Variables: vars}
 
-		variables := `vars{"dataset":"Teaching-Dataset"}`
-
-		gqlQueryMarshalled, err := json.Marshal(graphQLRequest{Query: query, Variables: variables})
-
+		gqlQueryMarshalled, err := json.Marshal(gqlReq)
 		if err != nil {
 			log.Error(ctx, "marshalling the gql query failed", err)
 			http.Error(w, "Failed to marshall the gql query", http.StatusInternalServerError)
@@ -164,28 +194,3 @@ func GetCantabularMetadataWithVars(ctx context.Context) http.HandlerFunc {
 		}
 	}
 }
-
-// const QueryDimensionsByName = `
-// query($dataset: String!, $variables: [String!]!) {
-// 	dataset(name: $dataset) {
-// 		variables(names: $variables) {
-// 			edges {
-// 				node {
-// 					name
-// 					label
-// 					categories {
-// 						totalCount
-// 					}
-// 				}
-// 			}
-// 		}
-// 	}
-// }`
-
-// // GetDimensionsByNameRequest holds the request variables required from the
-// // caller for making a request to obtain dimensions (Cantabular variables) by name
-// // POST [cantabular-ext]/graphql
-// type GetDimensionsByNameRequest struct {
-// 	Dataset        string
-// 	DimensionNames []string
-// }

@@ -21,6 +21,7 @@ func Setup(ctx context.Context, r *mux.Router) *API {
 	r.HandleFunc("/hello", HelloHandler(ctx)).Methods("GET")
 	r.HandleFunc("/", GetMockMetadata(ctx))
 	r.HandleFunc("/sample-query", GetCantabularMetadata(ctx))
-	r.HandleFunc("/sample-query-with-vars", GetCantabularMetadataWithVars(ctx))
+	//eg. --> id=Teaching-Dataset
+	r.HandleFunc("/{id}", GetCantabularMetadataWithVars(ctx))
 	return api
 }
